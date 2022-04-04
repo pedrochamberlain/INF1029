@@ -1,0 +1,110 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "matrix_lib.h"
+
+/* 
+
+Função: validate_matrix_contents
+-------------------------------
+valida se a instância de matriz é válida.
+
+retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+
+*/
+
+int validate_matrix_contents(struct matrix *matrix) {
+    if (matrix == NULL) {
+        printf("ERROR: Matrix is undeclared (NULL).");
+        return 0;
+    }
+
+    if (matrix-> height <= 0 || matrix->width <= 0) {
+        printf("ERROR: Matrix's height or width is invalid (<= 0).");
+        return 0;
+    }
+
+    return 1;
+}
+
+/* 
+
+Função: validate_matrix_operations
+----------------------------------
+valida se as instâncias de matriz podem ser utilizadas para fazer um produto escalar e 
+se a instância de matriz usada para armazenar o resultado é compátivel com as utilizadas no produto.
+
+retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+
+*/
+
+int validate_matrix_operations(struct matrix *a, struct matrix *b, struct matrix *c) {
+    if (validate_matrix_contents(a) == 0  || validate_matrix_contents(b) == 0 || validate_matrix_contents(c) == 0) return 0;
+
+    if (a->width != b->height) {
+        printf("ERROR: Matrixes width and height don't match.");
+        return 0;
+    }
+
+    if (a->height != c->height || b->width != c->width) {
+        printf("ERROR: The resulting matrix's width and height don't match with the matrixes used in the scalar operation.");
+        return 0;
+    }
+
+    return 1;
+}
+
+/* 
+
+Função: scalar_matrix_mult
+--------------------------
+faz o cálculo do produto de um valor escalar em uma matriz.
+
+scalar_value: valor escalar utilizada no cálculo. 
+matrix: matriz a ser utilizada no cálculo.
+
+retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+
+*/
+
+int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
+    unsigned long i;
+    if (validate_matrix_contents(matrix) == 0) return 0;
+
+    for (i = 0; i < matrix->height * matrix->width; i++) {
+        matrix->rows[i] *= scalar_value;
+    }
+
+    return 1;
+}
+
+
+/* 
+
+Função: matrix_matrix_mult
+--------------------------
+faz o cálculo do produto entre duas matrizes A e B, armazenando o resultado numa matriz C.
+
+a: matriz A, a ser utilizada no cálculo.
+b: matriz B, a ser utilizada no cálculo.
+c: matriz C, resultado armazenado do cálculo entre as matrizes A e B.
+
+retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+
+*/
+
+int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
+    if (validate_matrix_operations(a, b, c) == 0) return 0;
+
+    for (int i = 0 ; i < a->height; i++){
+        for (int j = 0 ; j < b->width; j++) {
+			float aux = a->rows[i * a->width + j];
+
+			for (int k = 0; k < b->width; k++) {
+				c->rows[i * c->width+k] += (aux * b->rows[j + b->width+k]);
+			}
+		}
+	}
+
+	return 1;
+}
