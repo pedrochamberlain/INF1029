@@ -68,11 +68,13 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 */
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
-    unsigned long i;
     if (validate_matrix_contents(matrix) == 0) return 0;
-
-    for (i = 0; i < matrix->height * matrix->width; i++) {
-        matrix->rows[i] *= scalar_value;
+    
+    float *m_curr = matrix->rows;
+    float *m_end = m_curr + (matrix->height * matrix->width) * sizeof(float *);
+    
+    for (; m_curr <= m_end; m_curr++) {
+        *m_curr *= scalar_value;
     }
 
     return 1;
