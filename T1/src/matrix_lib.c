@@ -19,8 +19,8 @@ int validate_matrix_contents(struct matrix *matrix) {
         return 0;
     }
 
-    if (matrix-> height <= 0 || matrix->width <= 0) {
-        printf("ERROR: Matrix's height or width is invalid (<= 0).");
+    if (matrix-> height < 0 || matrix->width < 0) {
+        printf("ERROR: Matrix's height or width is invalid (< 0).");
         return 0;
     }
 
