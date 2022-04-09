@@ -97,17 +97,44 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 */
 
 int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
+    float *a_curr, *a_end, *a_column_end, 
+          *b_curr, *b_end, *b_row_start, 
+          *c_curr;
+
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
-    for (int i = 0 ; i < a->height; i++){
-        for (int j = 0 ; j < b->width; j++) {
-			float aux = a->rows[i * a->width + j];
+    a_curr = a->rows;
+    a_column_end = a->rows + (a->width - 1);
+    a_end = a->rows + (a->height * a->width);
+    
+    b_curr = b->rows;
+    b_row_start = b->rows;
+    b_end = b->rows + (b->height * b->width);
+    
+    c_curr = c->rows;
 
-			for (int k = 0; k < b->width; k++) {
-				c->rows[i * c->width+k] += (aux * b->rows[j + b->width+k]);
-			}
-		}
-	}
+    for (; a_curr != a_end; a_curr++) {
+        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr++) {
+            if (*c_curr == 0.0f) {
+                *c_curr = *a_curr * (*b_curr);
+            } else {
+                *c_curr += *a_curr * (*b_curr);
+            }
 
-	return 1;
+            c_curr++;
+        }
+
+        if (b_curr != b_end) {
+            c_curr -= c->width;
+        }
+
+        if (a_curr != a_column_end) {
+            b_row_start = b_curr;
+        } else {
+            b_row_start = b->rows;
+            a_column_end += a->width;
+        }
+    }
+
+    return 1;
 }
