@@ -105,6 +105,7 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     float *a_curr, *a_end, *a_column_end, 
           *b_curr, *b_end, *b_row_start, 
           *c_curr;
+    __m256 a_curr_reg, b_curr_reg, c_curr_reg, result_reg;
 
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
@@ -119,14 +120,14 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     c_curr = c->rows;
 
     for (; a_curr != a_end; a_curr++) {
-        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr++) {
-            if (*c_curr == 0.0f) {
-                *c_curr = *a_curr * (*b_curr);
-            } else {
-                *c_curr += *a_curr * (*b_curr);
-            }
+        a_curr_reg = _mm256_set1_ps(scalar_value);
 
-            c_curr++;
+        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr++, c_curr++) {
+            b_curr_reg = _mm256_load_ps(b_curr);
+            c_curr_reg = _mm256_load_ps(c_curr);
+            
+            result_reg = _mm256_fmadd_ps(a_curr_reg, b_curr_reg, c_curr_reg);
+			_mm256_store_ps(c_curr_reg, result_reg);
         }
 
         if (b_curr != b_end) {
