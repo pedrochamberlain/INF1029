@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <immintrin.h>
 
 #include "matrix_lib.h"
 
@@ -69,13 +70,17 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
     float *m_curr, *m_end;
+    __m256 m_curr_reg, scalar_value_reg, result_reg;
     if (validate_matrix_contents(matrix) == 0) return 0;
     
     m_curr = matrix->rows;
     m_end = matrix->rows + (matrix->height * matrix->width);
+    scalar_value_reg = _mm256_set1_ps(scalar_value);
     
     for (; m_curr <= m_end; m_curr++) {
-        *m_curr *= scalar_value;
+        m_curr_reg = _mm256_load_ps(m_curr);
+		result_reg = _mm256_mul_ps(scalar_value_reg, m_curr);
+		_mm256_store_ps(m_curr, result_reg);
     }
 
     return 1;
