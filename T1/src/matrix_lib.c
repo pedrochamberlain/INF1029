@@ -115,12 +115,7 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
 
     for (; a_curr != a_end; a_curr++) {
         for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr++) {
-            if (*c_curr == 0.0f) {
-                *c_curr = *a_curr * (*b_curr);
-            } else {
-                *c_curr += *a_curr * (*b_curr);
-            }
-
+            *c_curr += *a_curr * (*b_curr);
             c_curr++;
         }
 
