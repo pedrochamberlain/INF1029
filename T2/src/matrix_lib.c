@@ -1,3 +1,6 @@
+// Nome: Lucas Angel Larios Prado - 2020723
+// Nome: Pedro Chamberlain Matos - 1710883
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <immintrin.h>
@@ -70,17 +73,18 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
     float *m_curr, *m_end;
-    __m256 m_curr_reg, scalar_value_reg, result_reg;
+    __m256 curr, result, scalar;
+
     if (validate_matrix_contents(matrix) == 0) return 0;
-    
+
     m_curr = matrix->rows;
     m_end = matrix->rows + (matrix->height * matrix->width);
-    scalar_value_reg = _mm256_set1_ps(scalar_value);
-    
-    for (; m_curr <= m_end; m_curr++) {
-        m_curr_reg = _mm256_load_ps(m_curr);
-		result_reg = _mm256_mul_ps(scalar_value_reg, m_curr);
-		_mm256_store_ps(m_curr, result_reg);
+    scalar = _mm256_set1_ps(scalar_value);
+
+    for (; m_curr <= m_end; m_curr+=8) {
+        curr = _mm256_load_ps(m_curr);
+        result = _mm256_mul_ps(curr, scalar);
+        _mm256_store_ps(m_curr, result);
     }
 
     return 1;
@@ -105,7 +109,7 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     float *a_curr, *a_end, *a_column_end, 
           *b_curr, *b_end, *b_row_start, 
           *c_curr;
-    __m256 a_curr_reg, b_curr_reg, c_curr_reg, result_reg;
+    __m256 scalar_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
 
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
@@ -120,14 +124,15 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     c_curr = c->rows;
 
     for (; a_curr != a_end; a_curr++) {
-        a_curr_reg = _mm256_set1_ps(scalar_value);
+        scalar_a_avx = _mm256_set1_ps(*a_curr);
 
-        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr++, c_curr++) {
-            b_curr_reg = _mm256_load_ps(b_curr);
-            c_curr_reg = _mm256_load_ps(c_curr);
-            
-            result_reg = _mm256_fmadd_ps(a_curr_reg, b_curr_reg, c_curr_reg);
-			_mm256_store_ps(c_curr_reg, result_reg);
+        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr += 8) {
+            matrix_b_avx = _mm256_load_ps(b_curr);
+            matrix_c_avx = _mm256_load_ps(c_curr);
+
+            result_avx = _mm256_fmadd_ps(scalar_a_avx, matrix_b_avx, matrix_c_avx);
+			_mm256_store_ps(c_curr, result_avx);
+            c_curr += 8;
         }
 
         if (b_curr != b_end) {
