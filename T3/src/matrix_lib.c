@@ -172,3 +172,26 @@ void set_number_threads(int num_threads) {
 
     NUM_THREADS = num_threads;
 }
+
+/* 
+
+Função: initialize_threads
+--------------------------
+inicializa as threads que serão utilizadas para efetuar 
+os cálculos das funções scalar_matrix_mult e matrix_matrix_mult.
+
+*/
+
+void initialize_threads(void *thread_routine, void *args, int args_struct_size) {
+    pthread_t threads[NUM_THREADS]; 
+    pthread_attr_t thread_attr;
+    void *value_ptr;
+
+    pthread_attr_init(&thread_attr);
+    pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
+    for(int i = 0; i < NUM_THREADS; i++, args += args_struct_size) {
+        pthread_create(&threads[i], &thread_attr, thread_routine, args);
+        pthread_join(threads[i], &value_ptr);
+    }
+}
