@@ -3,9 +3,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <pthread.h>
 #include <immintrin.h>
 
 #include "matrix_lib.h"
+
+// O valor padrão de threads do módulo é 1.
+int NUM_THREADS = 1;
 
 /* 
 
@@ -148,4 +152,23 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     }
 
     return 1;
+}
+
+/* 
+
+Função: set_number_threads
+--------------------------
+atualiza a variável global NUM_THREADS, que define o número de threads que devem ser disparadas.
+
+num_threads: número de threads a ser definido.
+
+*/
+
+void set_number_threads(int num_threads) {
+    if (num_threads <= 0) {
+        printf("ERROR: Number of threads is invalid (<= 0).");
+        return;
+    }
+
+    NUM_THREADS = num_threads;
 }
