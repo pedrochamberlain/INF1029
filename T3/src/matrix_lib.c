@@ -11,6 +11,12 @@
 // O valor padrão de threads do módulo é 1.
 int NUM_THREADS = 1;
 
+struct scalar_matrix_thread_args {
+    float* m_array_start;
+    int m_array_length;
+    float scalar;
+};
+
 /* 
 
 Função: validate_matrix_contents
@@ -66,7 +72,8 @@ int validate_matrix_operations(struct matrix *a, struct matrix *b, struct matrix
 
 Função: scalar_matrix_mult
 --------------------------
-faz o cálculo do produto de um valor escalar em uma matriz.
+inicia o processo de cálculo do produto de um valor escalar 
+em uma matriz em diversas threads diferentes.
 
 scalar_value: valor escalar utilizada no cálculo. 
 matrix: matriz a ser utilizada no cálculo.
@@ -76,22 +83,57 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 */
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
-    float *m_curr, *m_end;
-    __m256 curr, result, scalar;
+    float *m_curr;
+    int arrays_per_thread, m_array_length;
+    struct scalar_matrix_thread_args args[NUM_THREADS];
 
     if (validate_matrix_contents(matrix) == 0) return 0;
 
     m_curr = matrix->rows;
-    m_end = matrix->rows + (matrix->height * matrix->width);
-    scalar = _mm256_set1_ps(scalar_value);
+    arrays_per_thread = matrix->height / NUM_THREADS;
+    m_array_length = thread_rows * matrix->width;
 
-    for (; m_curr <= m_end; m_curr+=8) {
+    for (int i = 0; i < NUM_THREADS; i++, m_curr += m_array_length) {
+        args[i].m_array_start = m_curr;
+        args[i].m_array_length = m_array_length;
+        args[i].scalar = scalar_value;
+    }
+
+    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args))
+    return 1;
+}
+
+/* 
+
+Função: scalar_matrix_mult_routine
+--------------------------
+rotina iniciada por uma thread para fazer parte do processo 
+de cálculo do produto de um valor escalar  em uma matriz.
+
+thread_args: parâmetros da thread. 
+
+para mais informações sobre esses parâmetros, verifique 
+a definição da struct scalar_matrix_thread_args.
+
+*/
+
+int scalar_matrix_mult_routine(void *thread_args) {
+    struct scalar_matrix_thread_args *args = 
+        (struct scalar_matrix_thread_args *) thread_args;
+
+    float *m_curr = args->m_array_start, 
+        *m_end = args->m_array_start + args->m_array_length;
+
+    __m256 curr, result, 
+        scalar = _mm256_set1_ps(args->scalar);
+
+    for (; m_curr <= m_end; m_curr += 8) {
         curr = _mm256_load_ps(m_curr);
         result = _mm256_mul_ps(curr, scalar);
         _mm256_store_ps(m_curr, result);
     }
 
-    return 1;
+    pthread_exit(NULL);
 }
 
 
@@ -158,9 +200,8 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
 
 Função: set_number_threads
 --------------------------
-atualiza a variável global NUM_THREADS, que define o número de threads que devem ser disparadas.
-
-num_threads: número de threads a ser definido.
+atualiza a variável global NUM_THREADS, que define 
+o número de threads que devem ser inicializadas.
 
 */
 
