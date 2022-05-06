@@ -185,7 +185,7 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
         args[i].rows_per_thread = rows_per_thread;
     }
 
-    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args))
+    initialize_threads(args, matrix_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args))
     return 1;
 }
 
@@ -226,7 +226,7 @@ int matrix_matrix_mult_routine(void *thread_args) {
 
         matrix_a_avx = _mm256_set1_ps(*a_curr);
 
-        for (int column = 0; column < args->b_width; column += 8, b_curr += 8, c_curr += 8) {
+        for (int curr_column = 0; curr_column < args->b_width; curr_column += 8, b_curr += 8, c_curr += 8) {
             matrix_b_avx = _mm256_load_ps(b_curr);
             matrix_c_avx = _mm256_load_ps(c_curr);
             result_avx = _mm256_fmadd_ps(matrix_a_avx, matrix_b_avx, matrix_c_avx);
