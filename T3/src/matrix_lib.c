@@ -12,9 +12,19 @@
 int NUM_THREADS = 1;
 
 struct scalar_matrix_thread_args {
-    float* m_array_start;
+    float *m_array_start;
     int m_array_length;
     float scalar;
+};
+
+struct matrix_matrix_thread_args {
+    float *a_start;
+    float *a_width;
+    float *b_start;
+    float *b_width;
+    float *c_start;
+    float *c_width;
+    int rows_per_thread;
 };
 
 /* 
@@ -84,14 +94,14 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
     float *m_curr;
-    int arrays_per_thread, m_array_length;
+    int rows_per_thread, m_array_length;
     struct scalar_matrix_thread_args args[NUM_THREADS];
 
     if (validate_matrix_contents(matrix) == 0) return 0;
 
     m_curr = matrix->rows;
-    arrays_per_thread = matrix->height / NUM_THREADS;
-    m_array_length = thread_rows * matrix->width;
+    rows_per_thread = matrix->height / NUM_THREADS;
+    m_array_length = rows_per_thread * matrix->width;
 
     for (int i = 0; i < NUM_THREADS; i++, m_curr += m_array_length) {
         args[i].m_array_start = m_curr;
@@ -99,7 +109,7 @@ int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
         args[i].scalar = scalar_value;
     }
 
-    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args))
+    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args));
     return 1;
 }
 
@@ -141,7 +151,8 @@ int scalar_matrix_mult_routine(void *thread_args) {
 
 Função: matrix_matrix_mult
 --------------------------
-faz o cálculo do produto entre duas matrizes A e B, armazenando o resultado numa matriz C.
+inicia o processo do cálculo do produto entre duas matrizes A e B, 
+armazenando o resultado numa matriz C usando threads.
 
 a: matriz A, a ser utilizada no cálculo.
 b: matriz B, a ser utilizada no cálculo.
@@ -152,48 +163,85 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 */
 
 int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
-    float *a_curr, *a_end, *a_column_end, 
-          *b_curr, *b_end, *b_row_start, 
-          *c_curr;
-    __m256 scalar_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
+    float *a_curr, *c_curr;
+    int rows_per_thread, a_array_length, c_array_length;
+    struct matrix_matrix_thread_args args[NUM_THREADS];
 
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
     a_curr = a->rows;
-    a_column_end = a->rows + (a->width - 1);
-    a_end = a->rows + (a->height * a->width);
-    
-    b_curr = b->rows;
-    b_row_start = b->rows;
-    b_end = b->rows + (b->height * b->width);
-    
-    c_curr = c->rows;
+    c_curr = a->rows;
+    rows_per_thread = c->height / NUM_THREADS;
+    a_array_length = rows_per_thread * a->width;
+    c_array_length = rows_per_thread * c->width;
 
-    for (; a_curr != a_end; a_curr++) {
-        scalar_a_avx = _mm256_set1_ps(*a_curr);
+    for (int i = 0; i < NUM_THREADS; i++, a_curr += a_array_length, c_curr += c_array_length) {
+        args[i].a_start = a_curr;
+        args[i].a_width = a->width;
+        args[i].b_start = b->rows;
+        args[i].b_width = b->width;
+        args[i].c_start = c_curr;
+        args[i].c_width = b->width;
+        args[i].rows_per_thread = rows_per_thread;
+    }
 
-        for (b_curr = b_row_start; b_curr != b_row_start + b->width; b_curr += 8) {
+    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args))
+    return 1;
+}
+
+/* 
+
+Função: matrix_matrix_mult_routine
+--------------------------
+rotina iniciada por uma thread para fazer parte do processo 
+de cálculo do produto entre duas matrizes A e B, 
+armazenando o resultado numa matriz C.
+
+thread_args: parâmetros da thread. 
+
+para mais informações sobre esses parâmetros, verifique 
+a definição da struct matrix_matrix_thread_args.
+
+*/
+
+int matrix_matrix_mult_routine(void *thread_args) {
+    struct matrix_matrix_thread_args *args = 
+        (struct matrix_matrix_thread_args *) thread_args;
+
+    int a_column = 0, 
+        a_row = 0;
+
+    float *a_curr = args->a_start,
+        *b_curr = args->b_start,
+        *c_curr = args->c_start,
+
+    __m256 matrix_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
+
+    for (; a_row < args->rows_per_thread; a_curr++) {
+        b_curr = args->b_start;
+        b_curr += args->b_width * a_column;
+
+        c_curr = args->c_start;
+        c_curr += args->c_width * a_row;
+
+        matrix_a_avx = _mm256_set1_ps(*a_curr);
+
+        for (int column = 0; column < args->b_width; column += 8, b_curr += 8, c_curr += 8) {
             matrix_b_avx = _mm256_load_ps(b_curr);
             matrix_c_avx = _mm256_load_ps(c_curr);
-
-            result_avx = _mm256_fmadd_ps(scalar_a_avx, matrix_b_avx, matrix_c_avx);
+            result_avx = _mm256_fmadd_ps(matrix_a_avx, matrix_b_avx, matrix_c_avx);
 			_mm256_store_ps(c_curr, result_avx);
-            c_curr += 8;
         }
 
-        if (b_curr != b_end) {
-            c_curr -= c->width;
-        }
-
-        if (a_curr != a_column_end) {
-            b_row_start = b_curr;
+        if (a_column + 1 >= args->a_width) {
+            a_column = 0;
+            a_row++;
         } else {
-            b_row_start = b->rows;
-            a_column_end += a->width;
+            a_column++;
         }
     }
 
-    return 1;
+    pthread_exit(NULL);
 }
 
 /* 
