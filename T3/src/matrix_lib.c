@@ -19,11 +19,11 @@ struct scalar_matrix_thread_args {
 
 struct matrix_matrix_thread_args {
     float *a_start;
-    float *a_width;
     float *b_start;
-    float *b_width;
     float *c_start;
-    float *c_width;
+    int a_width;
+    int b_width;
+    int c_width;
     int rows_per_thread;
 };
 
@@ -196,7 +196,7 @@ int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
         args[i].scalar = scalar_value;
     }
 
-    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args));
+    initialize_threads(scalar_matrix_mult_routine, args, sizeof(struct scalar_matrix_thread_args));
     return 1;
 }
 
@@ -223,19 +223,18 @@ int matrix_matrix_mult_routine(void *thread_args) {
         a_row = 0;
 
     float *a_curr = args->a_start,
-        *b_curr = args->b_start,
-        *c_curr = args->c_start;
+        *b_curr, *c_curr;
 
     __m256 matrix_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
 
     for (; a_row < args->rows_per_thread; a_curr++) {
+        matrix_a_avx = _mm256_set1_ps(*a_curr);
+
         b_curr = args->b_start;
         b_curr += args->b_width * a_column;
 
         c_curr = args->c_start;
         c_curr += args->c_width * a_row;
-
-        matrix_a_avx = _mm256_set1_ps(*a_curr);
 
         for (int curr_column = 0; curr_column < args->b_width; curr_column += 8, b_curr += 8, c_curr += 8) {
             matrix_b_avx = _mm256_load_ps(b_curr);
@@ -244,7 +243,7 @@ int matrix_matrix_mult_routine(void *thread_args) {
 			_mm256_store_ps(c_curr, result_avx);
         }
 
-        if (a_column + 1 >= args->a_width) {
+        if (a_column + 1 == args->a_width) {
             a_column = 0;
             a_row++;
         } else {
@@ -278,21 +277,21 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
     a_curr = a->rows;
-    c_curr = a->rows;
+    c_curr = c->rows;
     rows_per_thread = c->height / NUM_THREADS;
     a_array_length = rows_per_thread * a->width;
     c_array_length = rows_per_thread * c->width;
 
     for (int i = 0; i < NUM_THREADS; i++, a_curr += a_array_length, c_curr += c_array_length) {
         args[i].a_start = a_curr;
-        args[i].a_width = a->width;
         args[i].b_start = b->rows;
-        args[i].b_width = b->width;
         args[i].c_start = c_curr;
-        args[i].c_width = b->width;
+        args[i].a_width = a->width;
+        args[i].b_width = b->width;
+        args[i].c_width = c->width;
         args[i].rows_per_thread = rows_per_thread;
     }
 
-    initialize_threads(args, matrix_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args));
+    initialize_threads(matrix_matrix_mult_routine, args, sizeof(struct matrix_matrix_thread_args));
     return 1;
 }
