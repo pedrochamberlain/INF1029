@@ -80,17 +80,21 @@ int validate_matrix_operations(struct matrix *a, struct matrix *b, struct matrix
 
 /* 
 
-Função: scalar_matrix_mult
+Função: set_number_threads
 --------------------------
-inicia o processo de cálculo do produto de um valor escalar 
-em uma matriz em diversas threads diferentes.
-
-scalar_value: valor escalar utilizada no cálculo. 
-matrix: matriz a ser utilizada no cálculo.
-
-retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+atualiza a variável global NUM_THREADS, que define 
+o número de threads que devem ser inicializadas.
 
 */
+
+void set_number_threads(int num_threads) {
+    if (num_threads <= 0) {
+        printf("ERROR: Number of threads is invalid (<= 0).");
+        return;
+    }
+
+    NUM_THREADS = num_threads;
+}
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
     float *m_curr;
@@ -109,8 +113,27 @@ int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
         args[i].scalar = scalar_value;
     }
 
-    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args));
-    return 1;
+/* 
+
+Função: initialize_threads
+--------------------------
+inicializa as threads que serão utilizadas para efetuar 
+os cálculos das funções scalar_matrix_mult e matrix_matrix_mult.
+
+*/
+
+void initialize_threads(void *thread_routine, void *args, int args_struct_size) {
+    pthread_t threads[NUM_THREADS]; 
+    pthread_attr_t thread_attr;
+    void *value_ptr;
+
+    pthread_attr_init(&thread_attr);
+    pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
+
+    for(int i = 0; i < NUM_THREADS; i++, args += args_struct_size) {
+        pthread_create(&threads[i], &thread_attr, thread_routine, args);
+        pthread_join(threads[i], &value_ptr);
+    }
 }
 
 /* 
@@ -146,6 +169,95 @@ int scalar_matrix_mult_routine(void *thread_args) {
     pthread_exit(NULL);
 }
 
+/* 
+
+Função: scalar_matrix_mult
+--------------------------
+inicia o processo de cálculo do produto de um valor escalar 
+em uma matriz em diversas threads diferentes.
+
+scalar_value: valor escalar utilizada no cálculo. 
+matrix: matriz a ser utilizada no cálculo.
+
+retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a função deve retornar 0.
+
+*/
+
+int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
+    float *m_curr;
+    int rows_per_thread, m_array_length;
+    struct scalar_matrix_thread_args args[NUM_THREADS];
+
+    if (validate_matrix_contents(matrix) == 0) return 0;
+
+    m_curr = matrix->rows;
+    rows_per_thread = matrix->height / NUM_THREADS;
+    m_array_length = rows_per_thread * matrix->width;
+
+    for (int i = 0; i < NUM_THREADS; i++, m_curr += m_array_length) {
+        args[i].m_array_start = m_curr;
+        args[i].m_array_length = m_array_length;
+        args[i].scalar = scalar_value;
+    }
+
+    initialize_threads(args, scalar_matrix_mult_routine, sizeof(struct scalar_matrix_thread_args));
+    return 1;
+}
+
+/* 
+
+Função: matrix_matrix_mult_routine
+--------------------------
+rotina iniciada por uma thread para fazer parte do processo 
+de cálculo do produto entre duas matrizes A e B, 
+armazenando o resultado numa matriz C.
+
+thread_args: parâmetros da thread. 
+
+para mais informações sobre esses parâmetros, verifique 
+a definição da struct matrix_matrix_thread_args.
+
+*/
+
+int matrix_matrix_mult_routine(void *thread_args) {
+    struct matrix_matrix_thread_args *args = 
+        (struct matrix_matrix_thread_args *) thread_args;
+
+    int a_column = 0, 
+        a_row = 0;
+
+    float *a_curr = args->a_start,
+        *b_curr = args->b_start,
+        *c_curr = args->c_start;
+
+    __m256 matrix_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
+
+    for (; a_row < args->rows_per_thread; a_curr++) {
+        b_curr = args->b_start;
+        b_curr += args->b_width * a_column;
+
+        c_curr = args->c_start;
+        c_curr += args->c_width * a_row;
+
+        matrix_a_avx = _mm256_set1_ps(*a_curr);
+
+        for (int curr_column = 0; curr_column < args->b_width; curr_column += 8, b_curr += 8, c_curr += 8) {
+            matrix_b_avx = _mm256_load_ps(b_curr);
+            matrix_c_avx = _mm256_load_ps(c_curr);
+            result_avx = _mm256_fmadd_ps(matrix_a_avx, matrix_b_avx, matrix_c_avx);
+			_mm256_store_ps(c_curr, result_avx);
+        }
+
+        if (a_column + 1 >= args->a_width) {
+            a_column = 0;
+            a_row++;
+        } else {
+            a_column++;
+        }
+    }
+
+    pthread_exit(NULL);
+}
 
 /* 
 
@@ -185,102 +297,6 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
         args[i].rows_per_thread = rows_per_thread;
     }
 
-    initialize_threads(args, matrix_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args))
+    initialize_threads(args, matrix_matrix_mult_routine, sizeof(struct matrix_matrix_thread_args));
     return 1;
-}
-
-/* 
-
-Função: matrix_matrix_mult_routine
---------------------------
-rotina iniciada por uma thread para fazer parte do processo 
-de cálculo do produto entre duas matrizes A e B, 
-armazenando o resultado numa matriz C.
-
-thread_args: parâmetros da thread. 
-
-para mais informações sobre esses parâmetros, verifique 
-a definição da struct matrix_matrix_thread_args.
-
-*/
-
-int matrix_matrix_mult_routine(void *thread_args) {
-    struct matrix_matrix_thread_args *args = 
-        (struct matrix_matrix_thread_args *) thread_args;
-
-    int a_column = 0, 
-        a_row = 0;
-
-    float *a_curr = args->a_start,
-        *b_curr = args->b_start,
-        *c_curr = args->c_start,
-
-    __m256 matrix_a_avx, matrix_b_avx, matrix_c_avx, result_avx;
-
-    for (; a_row < args->rows_per_thread; a_curr++) {
-        b_curr = args->b_start;
-        b_curr += args->b_width * a_column;
-
-        c_curr = args->c_start;
-        c_curr += args->c_width * a_row;
-
-        matrix_a_avx = _mm256_set1_ps(*a_curr);
-
-        for (int curr_column = 0; curr_column < args->b_width; curr_column += 8, b_curr += 8, c_curr += 8) {
-            matrix_b_avx = _mm256_load_ps(b_curr);
-            matrix_c_avx = _mm256_load_ps(c_curr);
-            result_avx = _mm256_fmadd_ps(matrix_a_avx, matrix_b_avx, matrix_c_avx);
-			_mm256_store_ps(c_curr, result_avx);
-        }
-
-        if (a_column + 1 >= args->a_width) {
-            a_column = 0;
-            a_row++;
-        } else {
-            a_column++;
-        }
-    }
-
-    pthread_exit(NULL);
-}
-
-/* 
-
-Função: set_number_threads
---------------------------
-atualiza a variável global NUM_THREADS, que define 
-o número de threads que devem ser inicializadas.
-
-*/
-
-void set_number_threads(int num_threads) {
-    if (num_threads <= 0) {
-        printf("ERROR: Number of threads is invalid (<= 0).");
-        return;
-    }
-
-    NUM_THREADS = num_threads;
-}
-
-/* 
-
-Função: initialize_threads
---------------------------
-inicializa as threads que serão utilizadas para efetuar 
-os cálculos das funções scalar_matrix_mult e matrix_matrix_mult.
-
-*/
-
-void initialize_threads(void *thread_routine, void *args, int args_struct_size) {
-    pthread_t threads[NUM_THREADS]; 
-    pthread_attr_t thread_attr;
-    void *value_ptr;
-
-    pthread_attr_init(&thread_attr);
-    pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
-
-    for(int i = 0; i < NUM_THREADS; i++, args += args_struct_size) {
-        pthread_create(&threads[i], &thread_attr, thread_routine, args);
-        pthread_join(threads[i], &value_ptr);
-    }
 }
