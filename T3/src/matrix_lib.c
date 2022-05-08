@@ -96,22 +96,18 @@ void set_number_threads(int num_threads) {
     NUM_THREADS = num_threads;
 }
 
-int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
-    float *m_curr;
-    int rows_per_thread, m_array_length;
-    struct scalar_matrix_thread_args args[NUM_THREADS];
+/* 
 
-    if (validate_matrix_contents(matrix) == 0) return 0;
+Função: get_number_threads
+--------------------------
+retorna o número de threads que devem ser inicializadas.
 
-    m_curr = matrix->rows;
-    rows_per_thread = matrix->height / NUM_THREADS;
-    m_array_length = rows_per_thread * matrix->width;
+*/
 
-    for (int i = 0; i < NUM_THREADS; i++, m_curr += m_array_length) {
-        args[i].m_array_start = m_curr;
-        args[i].m_array_length = m_array_length;
-        args[i].scalar = scalar_value;
-    }
+unsigned long get_number_threads()
+{
+    return (unsigned long) NUM_THREADS;
+}
 
 /* 
 
