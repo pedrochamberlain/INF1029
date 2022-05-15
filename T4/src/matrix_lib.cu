@@ -166,12 +166,13 @@ int mult_thread_routine(int c_length, float *a_d_rows, float *b_d_rows, float *c
         c_line, c_column;
 
     for (; i < n; i += stride) {
+        c_d_rows[i] = 0.0;
+        
         c_line = i / c_width;
-        c_column = i % c_width;
         a_line = c_line * a_width;
         a_end = a_line + a_width;
         
-        c_d_rows[i] = 0.0;
+        c_column = i % c_width;
         
         for (j = a_line, k = 0; j < a_end; j++, k++) {
             b_index = k * b_width + c_column;
