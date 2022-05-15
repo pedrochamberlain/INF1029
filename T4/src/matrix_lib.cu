@@ -10,29 +10,13 @@
 #include "matrix_lib.h"
 
 #define NUM_THREADS_PER_BLOCK_LIMIT 1024
-#define NUM_BLOCKS_PER_GRID_LIMIT 65535
+#define MAX_BLOCKS_PER_GRID_LIMIT 65535
 
 // O valor padrão de threads por bloco é 256.
 int NUM_THREADS_PER_BLOCK = 256;
 
-// O valor padrão de blocos por grid é 4096.
-int NUM_BLOCKS_PER_GRID = 4096;
-
-struct scalar_matrix_thread_args {
-    float *m_array_start;
-    int m_array_length;
-    float scalar;
-};
-
-struct matrix_matrix_thread_args {
-    float *a_start;
-    float *b_start;
-    float *c_start;
-    int a_width;
-    int b_width;
-    int c_width;
-    int rows_per_thread;
-};
+// O valor limite padrão de blocos por grid é 4096.
+int MAX_BLOCKS_PER_GRID = 4096;
 
 /* 
 
@@ -105,14 +89,16 @@ void set_grid_size(int threads_per_block, int max_blocks_per_grid) {
     if (threads_per_block > NUM_THREADS_PER_BLOCK_LIMIT) {
         printf("ERROR: Number of threads per block exceeded value");
         return 0;
-    } else if (max_blocks_per_grid > NUM_BLOCKS_PER_GRID_LIMIT) {
-        printf("ERROR: Number of blocks per grid exceeded value.");
+    } 
+    
+    if (max_blocks_per_grid > MAX_BLOCKS_PER_GRID_LIMIT) {
+        printf("ERROR: Max number of blocks per grid exceeded value.");
         return 0;
-    } else {
-        NUM_THREADS_PER_BLOCK = threads_per_block;
-        NUM_BLOCKS_PER_GRID = max_blocks_per_grid;
-        return 1;
-    }
+    } 
+    
+    NUM_THREADS_PER_BLOCK = threads_per_block;
+    MAX_BLOCKS_PER_GRID = max_blocks_per_grid;
+    return 1;
 }
 
 /* 
@@ -175,8 +161,7 @@ int scalar_matrix_mult_routine(void *thread_args) {
 
 Função: scalar_matrix_mult
 --------------------------
-inicia o processo de cálculo do produto de um valor escalar 
-em uma matriz em diversas threads diferentes.
+inicia o processo de cálculo do produto de um valor escalar em uma matriz.
 
 scalar_value: valor escalar utilizada no cálculo. 
 matrix: matriz a ser utilizada no cálculo.
@@ -265,7 +250,7 @@ int matrix_matrix_mult_routine(void *thread_args) {
 Função: matrix_matrix_mult
 --------------------------
 inicia o processo do cálculo do produto entre duas matrizes A e B, 
-armazenando o resultado numa matriz C usando threads.
+armazenando o resultado numa matriz C.
 
 a: matriz A, a ser utilizada no cálculo.
 b: matriz B, a ser utilizada no cálculo.
