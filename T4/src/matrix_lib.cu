@@ -205,7 +205,6 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     if (num_blocks > MAX_BLOCKS_PER_GRID) numBlocks = MAX_BLOCKS_PER_GRID;
 
     mult_thread_routine<<num_blocks, NUM_THREADS_PER_BLOCK>>(c_length, a->d_rows, b->d_rows, c->d_rows, a->width, b->width, c->width)
-
     cudaDeviceSynchronize();
     return 1;
 }
