@@ -5,11 +5,18 @@
 #include <stdlib.h>
 #include <pthread.h>
 #include <immintrin.h>
+#include <cuda_runtime.h>
 
 #include "matrix_lib.h"
 
-// O valor padrão de threads do módulo é 1.
-int NUM_THREADS = 1;
+#define NUM_THREADS_PER_BLOCK_LIMIT 1024
+#define NUM_BLOCKS_PER_GRID_LIMIT 65535
+
+// O valor padrão de threads por bloco é 256.
+int NUM_THREADS_PER_BLOCK = 256;
+
+// O valor padrão de blocos por grid é 4096.
+int NUM_BLOCKS_PER_GRID = 4096;
 
 struct scalar_matrix_thread_args {
     float *m_array_start;
@@ -80,33 +87,32 @@ int validate_matrix_operations(struct matrix *a, struct matrix *b, struct matrix
 
 /* 
 
-Função: set_number_threads
+Função: set_grid_size
 --------------------------
-atualiza a variável global NUM_THREADS, que define 
-o número de threads que devem ser inicializadas.
+atualiza as variáveis globais NUM_THREADS_PER_BLOCK e
+NUM_BLOCKS_PER_GRID, que definem o número de threads por
+blocos e o número de blocos por grid que devem ser utilizados.
+
+caso haja sucesso, a função retorna o valor 1.
+
+caso algum dos parâmetros extrapole um dos valores máximos
+definidos no início deste arquivo, os valores atuais devem 
+ser mantidos e a função retorna o valor 0.
 
 */
 
-void set_number_threads(int num_threads) {
-    if (num_threads <= 0) {
-        printf("ERROR: Number of threads is invalid (<= 0).");
-        return;
+void set_grid_size(int threads_per_block, int max_blocks_per_grid) {
+    if (threads_per_block > NUM_THREADS_PER_BLOCK_LIMIT) {
+        printf("ERROR: Number of threads per block exceeded value");
+        return 0;
+    } else if (max_blocks_per_grid > NUM_BLOCKS_PER_GRID_LIMIT) {
+        printf("ERROR: Number of blocks per grid exceeded value.");
+        return 0;
+    } else {
+        NUM_THREADS_PER_BLOCK = threads_per_block;
+        NUM_BLOCKS_PER_GRID = max_blocks_per_grid;
+        return 1;
     }
-
-    NUM_THREADS = num_threads;
-}
-
-/* 
-
-Função: get_number_threads
---------------------------
-retorna o número de threads que devem ser inicializadas.
-
-*/
-
-unsigned long get_number_threads()
-{
-    return (unsigned long) NUM_THREADS;
 }
 
 /* 
