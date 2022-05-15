@@ -103,58 +103,21 @@ void set_grid_size(int threads_per_block, int max_blocks_per_grid) {
 
 /* 
 
-Função: initialize_threads
---------------------------
-inicializa as threads que serão utilizadas para efetuar 
-os cálculos das funções scalar_matrix_mult e matrix_matrix_mult.
-
-*/
-
-void initialize_threads(void *thread_routine, void *args, int args_struct_size) {
-    pthread_t threads[NUM_THREADS]; 
-    pthread_attr_t thread_attr;
-    void *value_ptr;
-
-    pthread_attr_init(&thread_attr);
-    pthread_attr_setdetachstate(&thread_attr, PTHREAD_CREATE_JOINABLE);
-
-    for(int i = 0; i < NUM_THREADS; i++, args += args_struct_size) {
-        pthread_create(&threads[i], &thread_attr, thread_routine, args);
-        pthread_join(threads[i], &value_ptr);
-    }
-}
-
-/* 
-
-Função: scalar_matrix_mult_routine
+Função: scalar_thread_routine
 --------------------------
 rotina iniciada por uma thread para fazer parte do processo 
 de cálculo do produto de um valor escalar  em uma matriz.
 
-thread_args: parâmetros da thread. 
-
-para mais informações sobre esses parâmetros, verifique 
-a definição da struct scalar_matrix_thread_args.
-
 */
 
-int scalar_matrix_mult_routine(void *thread_args) {
-    struct scalar_matrix_thread_args *args = 
-        (struct scalar_matrix_thread_args *) thread_args;
-
-    float *m_curr = args->m_array_start, 
-        *m_end = args->m_array_start + args->m_array_length;
-
-    __m256 curr, result, 
-        scalar = _mm256_set1_ps(args->scalar);
-
-    for (; m_curr <= m_end; m_curr += 8) {
-        curr = _mm256_load_ps(m_curr);
-        result = _mm256_mul_ps(curr, scalar);
-        _mm256_store_ps(m_curr, result);
-    }
-
-    pthread_exit(NULL);
+__global__
+void scalar_thread_routine(int m_length, float *d_rows, float scalar_value) {
+    unsigned long int 
+        i = blockIdx.x * blockDim.x + threadIdx.x,
+        stride = blockDim.x * gridDim.x;
+    
+    for (; i < m_length; i += stride)
+        d_rows[i] *= scalar_value;
 }
 
 /* 
@@ -171,23 +134,16 @@ retorna: caso haja sucesso, a função retorna o valor 1. em caso de erro, a fun
 */
 
 int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
-    float *m_curr;
-    int rows_per_thread, m_array_length;
-    struct scalar_matrix_thread_args args[NUM_THREADS];
+    int m_length, num_blocks;
 
     if (validate_matrix_contents(matrix) == 0) return 0;
-
-    m_curr = matrix->rows;
-    rows_per_thread = matrix->height / NUM_THREADS;
-    m_array_length = rows_per_thread * matrix->width;
-
-    for (int i = 0; i < NUM_THREADS; i++, m_curr += m_array_length) {
-        args[i].m_array_start = m_curr;
-        args[i].m_array_length = m_array_length;
-        args[i].scalar = scalar_value;
-    }
-
-    initialize_threads(scalar_matrix_mult_routine, args, sizeof(struct scalar_matrix_thread_args));
+    
+    m_length = matrix->m_width * matrix->m_height;
+    num_blocks = (m_length + NUM_THREADS_PER_BLOCK - 1) / NUM_THREADS_PER_BLOCK;
+    if (num_blocks > MAX_BLOCKS_PER_GRID) numBlocks = MAX_BLOCKS_PER_GRID;
+    
+    scalar_thread_routine<<<num_blocks, NUM_THREADS_PER_BLOCK>>>(m_length, matrix->d_rows, scalar_value);
+    cudaDeviceSynchronize();
     return 1;
 }
 
