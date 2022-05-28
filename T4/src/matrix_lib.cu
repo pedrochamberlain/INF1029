@@ -34,8 +34,8 @@ int validate_matrix_contents(struct matrix *matrix) {
         return 0;
     }
 
-    if (matrix-> height < 0 || matrix->width < 0) {
-        printf("ERROR: Matrix's height or width is invalid (< 0).");
+    if (matrix->height == 0 || matrix->width == 0) {
+        printf("ERROR: Matrix's height / width is invalid (= 0).");
         return 0;
     }
 
@@ -85,7 +85,7 @@ ser mantidos e a função retorna o valor 0.
 
 */
 
-void set_grid_size(int threads_per_block, int max_blocks_per_grid) {
+int set_grid_size(int threads_per_block, int max_blocks_per_grid) {
     if (threads_per_block > NUM_THREADS_PER_BLOCK_LIMIT) {
         printf("ERROR: Number of threads per block exceeded value");
         return 0;
@@ -138,9 +138,9 @@ int scalar_matrix_mult(float scalar_value, struct matrix *matrix) {
 
     if (validate_matrix_contents(matrix) == 0) return 0;
     
-    m_length = matrix->m_width * matrix->m_height;
+    m_length = matrix->width * matrix->height;
     num_blocks = (m_length + NUM_THREADS_PER_BLOCK - 1) / NUM_THREADS_PER_BLOCK;
-    if (num_blocks > MAX_BLOCKS_PER_GRID) numBlocks = MAX_BLOCKS_PER_GRID;
+    if (num_blocks > MAX_BLOCKS_PER_GRID) num_blocks = MAX_BLOCKS_PER_GRID;
     
     scalar_thread_routine<<<num_blocks, NUM_THREADS_PER_BLOCK>>>(m_length, matrix->d_rows, scalar_value);
     cudaDeviceSynchronize();
@@ -157,15 +157,16 @@ armazenando o resultado numa matriz C.
 
 */
 
-int mult_thread_routine(int c_length, float *a_d_rows, float *b_d_rows, float *c_d_rows, int a_width, int b_width, int c_width) {
+__global__
+void mult_thread_routine(int c_length, float *a_d_rows, float *b_d_rows, float *c_d_rows, int a_width, int b_width, int c_width) {
     unsigned long int 
         i = blockIdx.x * blockDim.x + threadIdx.x,
-        stride = blockDim.x * gridDim.x;
+        stride = blockDim.x * gridDim.x,
         j, k, 
         a_line, a_end, b_index,
         c_line, c_column;
 
-    for (; i < n; i += stride) {
+    for (; i < c_length; i += stride) {
         c_d_rows[i] = 0.0;
         
         c_line = i / c_width;
@@ -202,10 +203,10 @@ int matrix_matrix_mult(struct matrix *a, struct matrix *b, struct matrix *c) {
     if (validate_matrix_operations(a, b, c) == 0) return 0;
 
     c_length = c->height * c->width;
-    num_blocks = (m_length + NUM_THREADS_PER_BLOCK - 1) / NUM_THREADS_PER_BLOCK;
-    if (num_blocks > MAX_BLOCKS_PER_GRID) numBlocks = MAX_BLOCKS_PER_GRID;
+    num_blocks = (c_length + NUM_THREADS_PER_BLOCK - 1) / NUM_THREADS_PER_BLOCK;
+    if (num_blocks > MAX_BLOCKS_PER_GRID) num_blocks = MAX_BLOCKS_PER_GRID;
 
-    mult_thread_routine<<num_blocks, NUM_THREADS_PER_BLOCK>>(c_length, a->d_rows, b->d_rows, c->d_rows, a->width, b->width, c->width)
+    mult_thread_routine<<num_blocks, NUM_THREADS_PER_BLOCK>>(c_length, a->d_rows, b->d_rows, c->d_rows, a->width, b->width, c->width);
     cudaDeviceSynchronize();
     return 1;
 }
